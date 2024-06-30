@@ -1,10 +1,11 @@
 import sys
+import os
 from PIL import Image
-from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFileDialog, QMessageBox, QDialog
+from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QPushButton, QHBoxLayout, QVBoxLayout, QFileDialog, QMessageBox, QDialog, QScrollArea, QGridLayout
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtCore import Qt, QTimer
 
-from modelo import predict_disease  
+from nuevo_modelo import predict_image, interpret_predictions, disease_columns
 
 class AboutDialog(QDialog):
     def __init__(self):
@@ -20,28 +21,37 @@ class MedScanApp(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("MedScan")
-        self.setGeometry(100, 100, 350, 400)
+        self.setGeometry(100, 100, 700, 400)  # Ventana más ancha
         self.setStyleSheet("background-color: #EEEDEB;")
         self.img = None
+
+        # Crear la etiqueta de resultados (antes de initUI)
+        self.result_label = QLabel(self)
+        self.result_label.setAlignment(Qt.AlignCenter)
+        self.result_label.setStyleSheet("color: white;")
+        self.result_label.setWordWrap(True)
 
         self.initUI()
 
     def show_about_dialog(self):
         dialog = AboutDialog()
-        # Centrar el diálogo en la ventana principal
         x = self.x() - (self.width() - dialog.width()) // 2
         y = self.y() - (self.height() - dialog.height()) // 2
         dialog.setGeometry(x, y, 200, 300)
-        dialog.exec_()  
+        dialog.exec_()
 
     def reset_app(self):
         self.img = None
         self.img_label.clear()
-        self.result_label.clear()
+        
+        # Limpiar el layout de resultados (si existe)
+        for i in reversed(range(self.results_layout.count())):
+            self.results_layout.itemAt(i).widget().setParent(None)
+
         self.upload_button.setText("Upload Image")
         self.upload_button.setStyleSheet(
-            "background-color: #939185; color: #EEEDEB; border: none;border-radius: 15px; width: 75px;height: 40px;font-weight: 900;"                            
-        ) 
+            "background-color: #939185; color: #EEEDEB; border: none;border-radius: 15px; width: 75px;height: 40px;font-weight: 900;"
+        )
         self.diagnose_button.hide()
 
     def upload_image(self):
@@ -62,23 +72,11 @@ class MedScanApp(QWidget):
 
     def perform_diagnosis(self):
         self.result_label.setText("Analizando...")
-        self.result_label.setStyleSheet("color: blue;")
-
         QTimer.singleShot(3000, self.show_diagnosis_result)
 
-    def show_diagnosis_result(self):
-        if self.img is not None:
-            prediction = predict_disease(self.img)
-            result_text = f"Diagnóstico: Enfermedad \n{prediction}" if prediction >= 0.12 else f"Diagnóstico: No Enfermedad \n{prediction}"
-            result_color = "red" if prediction >= 0.12 else "green"
-            self.result_label.setText(result_text)
-            self.result_label.setStyleSheet(f"color: {result_color}; border:none; border-radius:15px; width:75px; height:40px; font-weight:900;")
-        else:
-            QMessageBox.warning(self, "No Image", "Please upload an image first.")
-
     def initUI(self):
-        layout = QVBoxLayout()
-        button_layout = QHBoxLayout()
+        layout = QGridLayout()
+        self.setGeometry(100, 100, 700, 400)  
 
         # Estilos base para los botones
         button_style = """
@@ -96,48 +94,73 @@ class MedScanApp(QWidget):
             }
         """
 
+        # Columna izquierda (botones, imagen, diagnóstico)
+        left_column = QVBoxLayout()
+        left_column.setSpacing(10)  
+
+        # Layout horizontal para los botones superiores
+        top_buttons_layout = QHBoxLayout()
+
         # Botón "Reset"
         reset_button = QPushButton("Reset", self)
         reset_button.clicked.connect(self.reset_app)
         reset_button.setStyleSheet(
-            button_style + "QPushButton { background-color: #EF9C66; color: #2F3645; }"  # Estilo específico para Reset
+            button_style + "QPushButton { background-color: #EF9C66; color: #2F3645; }"
         )
-        button_layout.addWidget(reset_button)
+        top_buttons_layout.addWidget(reset_button)
 
         # Botón para cargar imagen
         self.upload_button = QPushButton("Upload Image", self)
         self.upload_button.clicked.connect(self.upload_image)
         self.upload_button.setStyleSheet(
-            button_style + "QPushButton { background-color: #2F3645; color: #EEEDEB; }"                                 
-        )  # Usar el estilo base
-        button_layout.addWidget(self.upload_button)
-
-        layout.addLayout(button_layout)
-
-        # Etiqueta para mostrar la imagen
+            button_style + "QPushButton { background-color: #2F3645; color: #EEEDEB; }"
+        )
+        top_buttons_layout.addWidget(self.upload_button)
+        
+        # Etiqueta para mostrar la imagen (tamaño fijo 300x300)
         self.img_label = QLabel(self)
-        self.img_label.setStyleSheet("background-color: #EEEDEB;border:solid 1px gray; border-radius: 15px;")
+        self.img_label.setFixedSize(300, 300)  
+        self.img_label.setStyleSheet("background-color: #EEEDEB; border: solid 1px gray; border-radius: 15px;")
         self.img_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.img_label)
 
         # Botón para realizar el diagnóstico (inicialmente oculto)
         self.diagnose_button = QPushButton("Realizar Diagnóstico", self)
         self.diagnose_button.clicked.connect(self.perform_diagnosis)
-        self.diagnose_button.setStyleSheet(button_style + "QPushButton { background-color: #95D2B3; color: #2F3645; }")  # Usar el estilo base
+        self.diagnose_button.setStyleSheet(button_style + "QPushButton { background-color: #95D2B3; color: #2F3645; }")
         self.diagnose_button.hide()
-        layout.addWidget(self.diagnose_button)
 
-        # Etiqueta para mostrar el resultado
-        self.result_label = QLabel(self)
-        self.result_label.setAlignment(Qt.AlignCenter)
-        self.result_label.setStyleSheet("color: white;")
-        layout.addWidget(self.result_label)
+        left_column.addLayout(top_buttons_layout)
+        left_column.addWidget(self.img_label)
+        left_column.addWidget(self.diagnose_button)
+        layout.addLayout(left_column, 0, 0, 3, 1)  # Expandir a 3 filas
 
+        # Columna derecha (resultados, botón About)
+        right_column = QVBoxLayout()
+        right_column.setSpacing(10)  
+        
+        # Título "Resultados"
+        results_title = QLabel("Resultados")
+        results_title.setAlignment(Qt.AlignCenter)  # Centrar el título
+        results_title.setStyleSheet("font-weight: bold; font-size: 16px;")  # Estilo para el título
+        right_column.addWidget(results_title)
+
+        # Widget contenedor para las pills (¡aquí está el cambio!)
+        results_widget = QWidget()
+        self.results_layout = QGridLayout(results_widget)
+        self.results_layout.setAlignment(Qt.AlignTop)
+        
+        # Agregar el widget contenedor al layout de la columna derecha
+        right_column.addWidget(results_widget)
+        
         # Botón "About"
         about_button = QPushButton("About", self)
         about_button.clicked.connect(self.show_about_dialog)
         about_button.setStyleSheet(button_style)
-        layout.addWidget(about_button)
+        right_column.addWidget(about_button)
+
+        # Alinear el botón "About" al final
+        right_column.addStretch(1)
+        layout.addLayout(right_column, 0, 1)
 
         self.setLayout(layout)
 
@@ -154,6 +177,55 @@ class MedScanApp(QWidget):
             
         # Evitar que la ventana se pueda redimensionar
         self.setFixedSize(self.size())
+
+    def show_diagnosis_result(self):
+        if self.img is not None:
+            # Guardar la imagen temporalmente
+            temp_image_path = "temp_image.png"
+            self.img.save(temp_image_path)
+
+            # Importar el modelo desde nuevo_modelo.py
+            from nuevo_modelo import model 
+
+            # Obtener predicciones y resultados
+            predictions = predict_image(model, temp_image_path)  
+            results = interpret_predictions(predictions)
+
+            # Limpiar el layout de resultados anterior (si existe)
+            for i in reversed(range(self.results_layout.count())):
+                self.results_layout.itemAt(i).widget().setParent(None)
+
+            # Crear y agregar las pills de resultados en dos columnas
+            row = 0
+            col = 0
+            for i, disease in enumerate(disease_columns):
+                result = results[0][i]
+                pill = QPushButton(disease, self)
+                pill.setFixedSize(150, 20)  
+                pill.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {"#FFCCCB" if result == 1 else "#90EE90"};
+                        color: black;
+                        border: none;
+                        border-radius: 10px; 
+                    }}
+                    QPushButton:hover {{
+                        background-color: {"#FF9999" if result == 1 else "#66CC66"};
+                    }}
+                """)
+
+                # Usar directamente self.results_layout (que ahora es QGridLayout)
+                self.results_layout.addWidget(pill, row, col)  
+
+                col += 1
+                if col == 2:  
+                    col = 0
+                    row += 1
+
+            # Eliminar la imagen temporal
+            os.remove(temp_image_path)
+        else:
+            QMessageBox.warning(self, "No Image", "Please upload an image first.")
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
