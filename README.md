@@ -2,6 +2,11 @@
 
 MedScan es una aplicación innovadora que aprovecha el poder de la inteligencia artificial para analizar radiografías de tórax y detectar posibles enfermedades pulmonares. Con una interfaz intuitiva y resultados precisos, MedScan empodera a los profesionales de la salud para tomar decisiones informadas y brindar un mejor cuidado a sus pacientes.
 
+![alt text](/assets/images/logo.png)
+![alt text](/assets/images/image.png)
+![alt text](/assets/images/image-1.png)
+![alt text](/assets/images/image-2.png)
+
 ## Características Principales
 
 - **Detección de Múltiples Enfermedades:** MedScan analiza radiografías de tórax y evalúa la probabilidad de presencia de diversas enfermedades pulmonares, como:
